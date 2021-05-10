@@ -3,33 +3,70 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <stdlib.h>
+/* error function */
+void errorMsg() {
+	char error_message[30] = "An error has ocurred\n";
+
+	write(STDERR_FILENO, error_message,
+	strlen(error_message));
+}
+
+/* exit built-in function */
+int exitFunction(int numArgs) {
+	if (numArgs == 1) {
+		exit(0);	
+	}
+
+	return 0;
+}
+void cdFunction(int numArgs, char *path) { 
+	if (numArgs != 2) {
+		if (chdir(path) != -1) {
+			chdir(path);
+		}
+	}
+}
+
+/* process input slicing the lines and inserting in myargv */
+int processInput(char *userLine, char *userArgs[]) {
+	char *sliceLine;
+	int i = 0;
+
+	userLine[strlen(userLine)-1] = 0;
+	
+	
+	while ( (sliceLine = strsep(&userLine, " ")) != NULL) {
+		userArgs[i] = strdup(sliceLine);
+		i++;
+	}
+
+	userArgs[i]= NULL;
+
+	return i;
+}
+
 
 int main(int argc, char *argv[]) {		
-	char error_message[30] = "An error has ocurred\n";
 
 	while (1) {	
 		printf("wish> ");
 		fflush(stdout);
 
-		int i = 0;
 		char *line = NULL;
 		size_t len = 0;		
 		char *myargv[20];
 		char *path[100]; 
-		char *sliceLine;
 		
 		getline(&line, &len, stdin);
-		line[strlen(line) - 1] = 0;
 
-		while ( (sliceLine = strsep(&line, " ")) != NULL) {
-			myargv[i] = strdup(sliceLine);
-			i++;
-		}
-
-		myargv[i]= NULL;
+		int lenArray =	processInput(line, myargv);
 
 		if (strcmp(myargv[0], "exit") == 0) {
-			exit(0);
+			exitFunction(lenArray);
+		}	
+		
+		if (strcmp(myargv[0], "cd") == 0) {
+			cdFunction(lenArray, myargv[1]);
 		}
 
 		int rc = fork();
@@ -40,8 +77,8 @@ int main(int argc, char *argv[]) {
 			strcat(path[0], myargv[0]);
 
 	      		if ((access(path[0], X_OK)) == -1) {
-				write(STDERR_FILENO, error_message,
-					strlen(error_message));
+				errorMsg();
+				exit(0);
 			}				
 				
 			myargv[0] = strdup(path[0]);
@@ -53,5 +90,7 @@ int main(int argc, char *argv[]) {
 			free(line);
 		}
 	}
-}
 
+	return 0;
+
+}
