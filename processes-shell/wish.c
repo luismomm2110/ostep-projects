@@ -3,9 +3,10 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <stdlib.h>
+
 /* error function */
 void errorMsg() {
-	char error_message[30] = "An error has ocurred\n";
+	char error_message[30] = "An error has occurred\n";
 
 	write(STDERR_FILENO, error_message,
 	strlen(error_message));
@@ -47,17 +48,28 @@ int processInput(char *userLine, char *userArgs[]) {
 
 
 int main(int argc, char *argv[]) {		
+	char *line = NULL;
+	size_t len = 0;		
+	char *myargv[20];
+	char *path[100]; 
+	FILE *fp = stdin;
+	ssize_t nread;
+
+	if (argc == 2) {
+		if ( (fp = fopen(argv[1], "r")) == NULL) {
+			errorMsg();	
+		}
+	} 
 
 	while (1) {	
-		printf("wish> ");
-		fflush(stdout);
+		if (argc == 1) {
+			printf("wish> ");
+			fflush(stdout);
+		}	
 
-		char *line = NULL;
-		size_t len = 0;		
-		char *myargv[20];
-		char *path[100]; 
-		
-		getline(&line, &len, stdin);
+               if ((nread = getline(&line, &len, fp)) == -1) {
+			exit(0);
+		}
 
 		int lenArray =	processInput(line, myargv);
 
@@ -87,6 +99,7 @@ int main(int argc, char *argv[]) {
 
 		} else {
 			rc = (int) wait(NULL);	
+		        fclose(fp);	
 			free(line);
 		}
 	}
