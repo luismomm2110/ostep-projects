@@ -4,8 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-
-
 /* error function */
 void errorMsg() {
 	char error_message[30] = "An error has occurred\n";
@@ -22,13 +20,14 @@ int exitFunction(int numArgs) {
 	return 0;
 }
 
+//TODO
 void cdFunction(int numArgs, char *path) { 
 //	char s[100];
 /*	printf("%s\n", getcwd(s, 100));
 	chdir("..");
 	printf("%s\n", getcwd(s, 100)); */
 }
-//TODO
+
 /* process input slicing the lines and inserting in myargv */
 int processInput(char *userLine, char *userArgs[]) {
 	char *sliceLine;
@@ -47,6 +46,28 @@ int processInput(char *userLine, char *userArgs[]) {
 	return i;
 }
 
+//redirect stdout and stdout of children to parent
+void redirectChild(FILE *in) {
+	int outFile;
+	if ((outFile = fileno(in)) == -1) {
+		errorMsg();
+		return;
+	}
+	
+	if (outFile != STDOUT_FILENO) {
+		//redirect output
+		if (dup2(outFile, STDOUT_FILENO) == -1) {
+			errorMsg();
+			return;
+		} 	
+		if (dup2(outFile, STDERR_FILENO) == -1) {
+			errorMsg();
+			return;
+		}
+		fclose(in);
+	}
+}
+
 int main(int argc, char *argv[]) {		
 	char *line = NULL;
 	size_t len = 0;		
@@ -55,6 +76,7 @@ int main(int argc, char *argv[]) {
 	FILE *fp = stdin;
 	ssize_t nread;
 	int statval;
+	FILE *out = stdout;
 
 	if (argc == 2) {
 		if ( (fp = fopen(argv[1], "r")) == NULL) {
@@ -83,14 +105,11 @@ int main(int argc, char *argv[]) {
 			cdFunction(lenArray, myargv[1]);
 		}
 		
-		char *debugMessage = "write message for debug in STDERR\n";
-		
-		write(STDERR_FILENO, debugMessage, strlen(debugMessage));
-			
 		int rc = fork();
-		
 
-		if (rc == 0) {
+		if (rc == -1) {
+			errorMsg();
+		} else if (rc == 0) {
 			path[0] = strdup("/bin/");
 			strcat(path[0], myargv[0]);
 
@@ -100,20 +119,14 @@ int main(int argc, char *argv[]) {
 			}				
 				
 			myargv[0] = strdup(path[0]);
+			redirectChild(out);
 			
 			execv(myargv[0], myargv);
+			errorMsg();
+			exit(0);
 
 		} else {
 			wait(&statval);
- 			if (WIFEXITED(statval)) {
-				if (WEXITSTATUS(statval) != 0) {	
-					char *debugError = strerror(WEXITSTATUS(statval));
-					write(STDERR_FILENO, debugError,
-					strlen(debugError));
-				}
-			} else {
-				printf("not terminate with exit\n");
-			}
 			free(line);
 			line = NULL;
 		}
