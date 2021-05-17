@@ -20,12 +20,17 @@ int exitFunction(int numArgs) {
 	return 0;
 }
 
-//TODO
+
 void cdFunction(int numArgs, char *path) { 
-//	char s[100];
-/*	printf("%s\n", getcwd(s, 100));
-	chdir("..");
-	printf("%s\n", getcwd(s, 100)); */
+	if (numArgs != 2) {
+		errorMsg();	
+		exit(0);
+	}	
+	
+	if (chdir(path) == -1) {
+		errorMsg();
+		exit(0);	
+	}
 }
 
 /* process input slicing the lines and inserting in myargv */
@@ -103,6 +108,7 @@ int main(int argc, char *argv[]) {
 		
 		if (strcmp(myargv[0], "cd") == 0) {
 			cdFunction(lenArray, myargv[1]);
+			continue;
 		}
 		
 		int rc = fork();
