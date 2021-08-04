@@ -1,7 +1,9 @@
 /*  Use for paralel blocking and slow I/O operations 
     Threads should be created and joined
     Mutex created using with PHTHREAD MUTEX INITILIAZER and wrapped for sucess
-    compile: gcc -o main main.c -Wall -pthread
+    compile: gcc -o pzip pzip.c -Wall -pthread
+    Use producer-consumer problem solution 
+
  */
 #include <pthread.h>
 #include <sys/stat.h> // file stats
@@ -26,6 +28,16 @@ check (int test, const char * message, ...)
     }
 }
 
+int 
+open_file(const char *file_name) { 
+    int file_descriptor = 0;
+    file_descriptor = open(file_name, O_RDONLY);
+    check (file_descriptor < 0, "open %s failed: %s", file_name, strerror(errno));
+    
+    return file_descriptor;  
+}
+
+
 int main (int argc, char* argv[]) {
     int file_descriptor;
 
@@ -36,8 +48,7 @@ int main (int argc, char* argv[]) {
     const char * file_name = "foo.txt";
     const char * mapped;
 
-    file_descriptor = open("foo.txt", O_RDONLY);
-    check (file_descriptor < 0, "open %s failed: %s", file_name, strerror(errno));
+    file_descriptor = open_file(file_name);
 
     check_status_file = fstat(file_descriptor, &stat_file);
     check (check_status_file < 0, "stat %s failed: %s", file_name, strerror(errno));
