@@ -1,3 +1,9 @@
+/*  Use for paralel blocking and slow I/O operations 
+    Threads should be created and joined
+    Mutex created using with PHTHREAD MUTEX INITILIAZER and wrapped for sucess
+    compile: gcc -o main main.c -Wall -pthread
+ */
+#include <pthread.h>
 #include <sys/stat.h> // file stats
 #include <sys/mman.h> //mmap 
 #include <errno.h>
