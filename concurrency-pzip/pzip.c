@@ -2,6 +2,8 @@
     Threads should be created and joined
     Mutex created using with PHTHREAD MUTEX INITILIAZER and wrapped for sucess
  */
+
+#define _GNU_SOURCE
 #include <sys/stat.h> // file stats
 #include <sys/mman.h> //mmap 
 #include <errno.h>
@@ -10,10 +12,13 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "common_threads.h"
 
 void *thread_printer (void *arg) {
-    printf("%s\n", (char *) arg);
+    pid_t tid = gettid();
+    printf("%s Thread ID: %d\n", (char *) arg, tid);
     return NULL;
 }
 
@@ -59,19 +64,19 @@ int main (int argc, char* argv[]) {
     mapped = mmap(0, size_file, PROT_READ, MAP_PRIVATE, file_descriptor, 0);
     check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
 
-    Pthread_create(&p1, NULL, thread_printer, "A");
-    Pthread_create(&p2, NULL, thread_printer, "B");
+
+
+    for (int i = 0; i < size_file; i++) {
+        char c;
+        c =  mapped[i];
+        
+        Pthread_create(&p1, NULL, thread_printer, &c);
+        Pthread_create(&p2, NULL, thread_printer, &c);
+
+    }
 
     Pthread_join(p1, NULL);
     Pthread_join(p2, NULL);
 
-    /*
-    for (int i = 0; i < size_file; i++) {
-        char c;
-
-        c = mapped[i];
-        putchar(c);
-    }
-    */
     return 0;
 }
