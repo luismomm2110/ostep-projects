@@ -32,32 +32,41 @@ check (int test, const char * message, ...)
 
 int 
 open_file(const char *file_name) { 
-    int file_descriptor = 0;
+    int file_descriptor;
     file_descriptor = open(file_name, O_RDONLY);
     check (file_descriptor < 0, "open %s failed: %s", file_name, strerror(errno));
     
     return file_descriptor;  
 }
 
+size_t 
+check_status_file(int file_descriptor, struct stat stat_file, const char *file_name) {
+    int check_status_file = check_status_file = fstat(file_descriptor, &stat_file);
+    check (check_status_file < 0, "stat %s failed: %s", file_name, strerror(errno));
+
+    return stat_file.st_size;
+}
+
+const char*
+create_map(size_t size_file, const char* file_name, int file_descriptor) {
+    const char *mapped = mmap(0, size_file, PROT_READ, MAP_PRIVATE, file_descriptor, 0);
+    check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
+
+    return mapped;
+}
 
 int main (int argc, char* argv[]) {
     pthread_t p1, p2; 
     int file_descriptor;
     /* Info about file */
     struct stat stat_file;
-    int check_status_file;
     size_t size_file;
     const char * file_name = "foo.txt";
     const char * mapped;
 
     file_descriptor = open_file(file_name);
-
-    check_status_file = fstat(file_descriptor, &stat_file);
-    check (check_status_file < 0, "stat %s failed: %s", file_name, strerror(errno));
-    size_file = stat_file.st_size;
-
-    mapped = mmap(0, size_file, PROT_READ, MAP_PRIVATE, file_descriptor, 0);
-    check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
+    size_file = check_status_file(file_descriptor, stat_file, file_name);
+    mapped = create_map(size_file, file_name, file_descriptor);
 
     Pthread_create(&p1, NULL, thread_printer, "A");
     Pthread_create(&p2, NULL, thread_printer, "B");
@@ -65,13 +74,12 @@ int main (int argc, char* argv[]) {
     Pthread_join(p1, NULL);
     Pthread_join(p2, NULL);
 
-    /*
     for (int i = 0; i < size_file; i++) {
         char c;
 
         c = mapped[i];
         putchar(c);
     }
-    */
+    
     return 0;
 }
