@@ -1,9 +1,7 @@
 /*  Use for paralel blocking and slow I/O operations 
     Threads should be created and joined
     Mutex created using with PHTHREAD MUTEX INITILIAZER and wrapped for sucess
-    compile: gcc -o main main.c -Wall -pthread
  */
-#include <pthread.h>
 #include <sys/stat.h> // file stats
 #include <sys/mman.h> //mmap 
 #include <errno.h>
@@ -12,6 +10,12 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "common_threads.h"
+
+void *thread_printer (void *arg) {
+    printf("%s\n", (char *) arg);
+    return NULL;
+}
 
 static void
 check (int test, const char * message, ...)
@@ -27,8 +31,8 @@ check (int test, const char * message, ...)
 }
 
 int main (int argc, char* argv[]) {
+    pthread_t p1, p2; 
     int file_descriptor;
-
     /* Info about file */
     struct stat stat_file;
     int check_status_file;
@@ -46,11 +50,19 @@ int main (int argc, char* argv[]) {
     mapped = mmap(0, size_file, PROT_READ, MAP_PRIVATE, file_descriptor, 0);
     check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
 
+    Pthread_create(&p1, NULL, thread_printer, "A");
+    Pthread_create(&p2, NULL, thread_printer, "B");
+
+    Pthread_join(p1, NULL);
+    Pthread_join(p2, NULL);
+
+    /*
     for (int i = 0; i < size_file; i++) {
         char c;
 
         c = mapped[i];
         putchar(c);
     }
+    */
     return 0;
 }
