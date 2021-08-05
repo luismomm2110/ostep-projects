@@ -30,6 +30,16 @@ check (int test, const char * message, ...)
     }
 }
 
+int 
+open_file(const char *file_name) { 
+    int file_descriptor = 0;
+    file_descriptor = open(file_name, O_RDONLY);
+    check (file_descriptor < 0, "open %s failed: %s", file_name, strerror(errno));
+    
+    return file_descriptor;  
+}
+
+
 int main (int argc, char* argv[]) {
     pthread_t p1, p2; 
     int file_descriptor;
@@ -40,8 +50,7 @@ int main (int argc, char* argv[]) {
     const char * file_name = "foo.txt";
     const char * mapped;
 
-    file_descriptor = open("foo.txt", O_RDONLY);
-    check (file_descriptor < 0, "open %s failed: %s", file_name, strerror(errno));
+    file_descriptor = open_file(file_name);
 
     check_status_file = fstat(file_descriptor, &stat_file);
     check (check_status_file < 0, "stat %s failed: %s", file_name, strerror(errno));
