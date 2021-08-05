@@ -1,6 +1,7 @@
 /*  Use for paralel blocking and slow I/O operations 
     Threads should be created and joined
     Mutex created using with PHTHREAD MUTEX INITILIAZER and wrapped for sucess
+    references: https://stackoverflow.com/questions/32035671/multithreading-file-compress
  */
 
 #define _GNU_SOURCE
@@ -63,8 +64,6 @@ int main (int argc, char* argv[]) {
 
     mapped = mmap(0, size_file, PROT_READ, MAP_PRIVATE, file_descriptor, 0);
     check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
-
-
 
     for (int i = 0; i < size_file; i++) {
         char c;
