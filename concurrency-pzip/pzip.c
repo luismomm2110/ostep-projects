@@ -1,7 +1,9 @@
 /*  Use for paralel blocking and slow I/O operations 
     Threads should be created and joined
+    Should determine number of threads using processor info
     Mutex created using with PHTHREAD MUTEX INITILIAZER and wrapped for sucess
     references: https://stackoverflow.com/questions/32035671/multithreading-file-compress
+    https://pages.cs.wisc.edu/~remzi/OSTEP/threads-cv.pdf p14
  */
 
 #define _GNU_SOURCE
@@ -16,6 +18,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "common_threads.h"
+
 
 void *thread_printer (void *arg) {
     pid_t tid = gettid();
@@ -59,6 +62,60 @@ create_map(size_t size_file, const char* file_name, int file_descriptor) {
     check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
 
     return mapped;
+}
+
+const int MAX = 30;
+int fill_ptr = 0;
+int use_ptr = 0;
+int count = 0;
+int buffer[30];
+int loops = 10;
+
+void
+put(int value) {
+    buffer[fill_ptr] = value;
+    fill_ptr = (fill_ptr + 1)%MAX;
+    count++;
+}
+
+int 
+get(){
+    int tmp = buffer[use_ptr];
+    use_ptr = (use_ptr - 1)%MAX;
+    count--;
+    printf("%d\n", tmp);
+    return tmp;
+}
+
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
+pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *producer(void *arg) {
+    int i;
+    for (i = 0; i < loops; i++) {
+        Pthread_mutex_lock(&mutex);
+        while (count == MAX) 
+            Pthread_cond_wait(&empty, &mutex);
+        put(i);
+        Pthread_cond_signal(&fill);
+        Pthread_mutex_unlock(&mutex);
+    }
+    return NULL;
+}
+
+void *consumer(void *arg) {
+    int i;
+    for (i = 0; i < loops; i++) {
+        Pthread_mutex_lock(&mutex);
+        while (count == 0) 
+            Pthread_cond_wait(&fill, &mutex);
+        int tmp = get();
+        Pthread_cond_signal(&empty);
+        Pthread_mutex_unlock(&mutex);
+        printf("%d\n", tmp);
+    }
+    return NULL;
 }
 
 int main (int argc, char* argv[]) {
