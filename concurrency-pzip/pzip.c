@@ -7,6 +7,10 @@
  */
 
 #define _GNU_SOURCE
+#define MAX 1
+#define FULL 0
+#define EMPTY 0
+
 #include <sys/stat.h> // file stats
 #include <sys/mman.h> //mmap 
 #include <errno.h>
@@ -19,11 +23,11 @@
 #include <unistd.h>
 #include "common_threads.h"
 
-
-void *thread_printer (void *arg) {
-    pid_t tid = gettid();
-    printf("%s Thread ID: %d\n", (char *) arg, tid);
-    return NULL;
+char
+*concat_char(int number, char c) {
+    char *item = malloc(sizeof(char)*5);
+    sprintf(item, "%d%c", number, c);
+    return item;
 }
 
 static void
@@ -44,104 +48,133 @@ open_file(const char *file_name) {
     int file_descriptor;
     file_descriptor = open(file_name, O_RDONLY);
     check (file_descriptor < 0, "open %s failed: %s", file_name, strerror(errno));
-    
     return file_descriptor;  
 }
 
 size_t 
 check_status_file(int file_descriptor, struct stat stat_file, const char *file_name) {
-    int check_status_file = check_status_file = fstat(file_descriptor, &stat_file);
+    int check_status_file  = fstat(file_descriptor, &stat_file);
     check (check_status_file < 0, "stat %s failed: %s", file_name, strerror(errno));
-
     return stat_file.st_size;
 }
 
 const char*
 create_map(size_t size_file, const char* file_name, int file_descriptor) {
     const char *mapped = mmap(0, size_file, PROT_READ, MAP_PRIVATE, file_descriptor, 0);
-    check (mapped == MAP_FAILED, "mmap %s failed: %s", file_name, strerror(errno));
-
     return mapped;
 }
 
-const int MAX = 30;
-int fill_ptr = 0;
-int use_ptr = 0;
-int count = 0;
-int buffer[30];
-int loops = 10;
+void
+write_file(char* item, FILE *fp)
+{
+    fputs(item, fp);
+}
+
+int next_in = 0;
+int next_out = 0;
+char* buffer[MAX];
+sem_t empty, full;
 
 void
-put(int value) {
-    buffer[fill_ptr] = value;
-    fill_ptr = (fill_ptr + 1)%MAX;
-    count++;
-}
+put(char* item) {
+    //dont put if not empty, in first value of empty is one so first threads passes
+    Sem_wait(&empty);
 
-int 
-get(){
-    int tmp = buffer[use_ptr];
-    use_ptr = (use_ptr - 1)%MAX;
-    count--;
-    printf("%d\n", tmp);
-    return tmp;
-}
-
-pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
-pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void *producer(void *arg) {
-    int i;
-    for (i = 0; i < loops; i++) {
-        Pthread_mutex_lock(&mutex);
-        while (count == MAX) 
-            Pthread_cond_wait(&empty, &mutex);
-        put(i);
-        Pthread_cond_signal(&fill);
-        Pthread_mutex_unlock(&mutex);
+    //put item in current position of buffer
+    buffer[next_in] = item;
+    printf("In put: %s\n", item);
+    next_in = (next_in + 1)%MAX;
+    if (next_in == FULL) {
+        //if full, signal that some thread can pass full
+        Sem_post(&full);
+        sleep(1);
     }
-    return NULL;
+    //restore value of empty so other thread can enter
+    Sem_post(&empty);
 }
 
-void *consumer(void *arg) {
-    int i;
-    for (i = 0; i < loops; i++) {
-        Pthread_mutex_lock(&mutex);
-        while (count == 0) 
-            Pthread_cond_wait(&fill, &mutex);
-        int tmp = get();
-        Pthread_cond_signal(&empty);
-        Pthread_mutex_unlock(&mutex);
-        printf("%d\n", tmp);
-    }
-    return NULL;
+char  
+*get(){
+    char* item;
+
+    // init at zero, can only enter after buffer was fulled by producer
+    Sem_wait(&full);
+
+    item = buffer[next_out];
+    printf("in get %s\n", item);
+    next_out = (next_out + 1)%MAX;
+    if (next_out == EMPTY)
+        sleep(1);
+
+    //restore post to one so wake up other thread waiting 
+    Sem_post(&full);
+    Sem_wait(&full);
+    return item;
 }
 
-int main (int argc, char* argv[]) {
-    pthread_t p1, p2; 
+void *producer() {
     int file_descriptor;
     /* Info about file */
     struct stat stat_file;
     size_t size_file;
     const char * file_name = "foo.txt";
     const char * mapped;
+    char* item;
 
     file_descriptor = open_file(file_name);
     size_file = check_status_file(file_descriptor, stat_file, file_name);
     mapped = create_map(size_file, file_name, file_descriptor);
 
+    char initial_char = mapped[0];
+    int count = 1;
+    item = concat_char(count, initial_char);
+
     for (int i = 0; i < size_file; i++) {
-        char c;
-        c =  mapped[i];
-        
-        Pthread_create(&p1, NULL, thread_printer, &c);
-        Pthread_create(&p2, NULL, thread_printer, &c);
-
+        char c =  mapped[i];
+        if (c == initial_char) {
+            count++;
+        } else {
+            if (c != '\0') { 
+                item = concat_char(count, initial_char);
+                put(item);
+            }
+            count = 1; 
+            initial_char = c;
+        }
     }
+    return NULL;
+}
 
+void *consumer(void* fp) {
+    int i;
+    char* item;
+
+    fp = (FILE* ) fp;
+
+    for (i = 0; i < 5; i++) {
+        item = get();
+        write_file(item, fp);
+    }
+    return NULL;
+}
+
+int main (int argc, char* argv[]) {
+    pthread_t p1, p2; 
+    FILE *fp;
+
+    fp = fopen("result.txt", "w+");
+    if (fp < 0)
+        printf("error opening file\n");
+
+    Sem_init(&empty, 1);
+    Sem_init(&full, 0);
+
+    Pthread_create(&p1, NULL, producer, NULL);
+    Pthread_create(&p2, NULL, consumer, (void *) fp);
     Pthread_join(p1, NULL);
     Pthread_join(p2, NULL);
+
+    fclose(fp);
 
     return 0;
 }
