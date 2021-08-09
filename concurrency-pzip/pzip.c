@@ -7,6 +7,10 @@
  */
 
 #define _GNU_SOURCE
+#define MAX 4
+#define FULL 0
+#define EMPTY 0
+
 #include <sys/stat.h> // file stats
 #include <sys/mman.h> //mmap 
 #include <errno.h>
@@ -18,13 +22,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "common_threads.h"
-
-
-void *thread_printer (void *arg) {
-    pid_t tid = gettid();
-    printf("%s Thread ID: %d\n", (char *) arg, tid);
-    return NULL;
-}
 
 static void
 check (int test, const char * message, ...)
@@ -50,7 +47,7 @@ open_file(const char *file_name) {
 
 size_t 
 check_status_file(int file_descriptor, struct stat stat_file, const char *file_name) {
-    int check_status_file = check_status_file = fstat(file_descriptor, &stat_file);
+    int check_status_file  = fstat(file_descriptor, &stat_file);
     check (check_status_file < 0, "stat %s failed: %s", file_name, strerror(errno));
 
     return stat_file.st_size;
@@ -64,62 +61,42 @@ create_map(size_t size_file, const char* file_name, int file_descriptor) {
     return mapped;
 }
 
-const int MAX = 30;
-int fill_ptr = 0;
-int use_ptr = 0;
-int count = 0;
-int buffer[30];
-int loops = 10;
+int next_in = 0;
+int next_out = 0;
+char buffer[MAX];
+sem_t empty, full;
 
 void
-put(int value) {
-    buffer[fill_ptr] = value;
-    fill_ptr = (fill_ptr + 1)%MAX;
-    count++;
+put(char item) {
+    Sem_wait(&empty) //dont put if not empty
+
+    buffer[next_in] = item;
+    next_in = (next_in + 1)%MAX;
+    
+    if (next_in == FULL) {
+        Sem_post(&full);
+        sleep(1);
+    }
+    Sem_post(&empty);
 }
 
-int 
+void 
 get(){
-    int tmp = buffer[use_ptr];
-    use_ptr = (use_ptr - 1)%MAX;
-    count--;
-    printf("%d\n", tmp);
-    return tmp;
+    int item;
+
+    Sem_wait(&full);
+
+    item = buffer[next_out];
+    next_out = (next_out + 1)%MAX;
+    printf("\t...Consuming %c ...nextOut %d..Ascii=%d\n",item,next_out,item);
+    
+    if (next_out == EMPTY)
+        sleep(1);
+
+    Sem_post(&full);
 }
 
-pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
-pthread_cond_t fill = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void *producer(void *arg) {
-    int i;
-    for (i = 0; i < loops; i++) {
-        Pthread_mutex_lock(&mutex);
-        while (count == MAX) 
-            Pthread_cond_wait(&empty, &mutex);
-        put(i);
-        Pthread_cond_signal(&fill);
-        Pthread_mutex_unlock(&mutex);
-    }
-    return NULL;
-}
-
-void *consumer(void *arg) {
-    int i;
-    for (i = 0; i < loops; i++) {
-        Pthread_mutex_lock(&mutex);
-        while (count == 0) 
-            Pthread_cond_wait(&fill, &mutex);
-        int tmp = get();
-        Pthread_cond_signal(&empty);
-        Pthread_mutex_unlock(&mutex);
-        printf("%d\n", tmp);
-    }
-    return NULL;
-}
-
-int main (int argc, char* argv[]) {
-    pthread_t p1, p2; 
+void *producer() {
     int file_descriptor;
     /* Info about file */
     struct stat stat_file;
@@ -134,11 +111,31 @@ int main (int argc, char* argv[]) {
     for (int i = 0; i < size_file; i++) {
         char c;
         c =  mapped[i];
-        
-        Pthread_create(&p1, NULL, thread_printer, &c);
-        Pthread_create(&p2, NULL, thread_printer, &c);
-
+        put(c);
     }
+    return NULL;
+}
+
+void *consumer() {
+    int i;
+    for (i = 0; i < 10; i++) {
+        get();
+    }
+    return NULL;
+}
+
+int main (int argc, char* argv[]) {
+    pthread_t p1, p2; 
+
+
+    Sem_init(&empty, 1);
+    Sem_init(&full, 0);
+
+    Pthread_create(&p1, NULL, producer, NULL);
+    Pthread_create(&p2, NULL, consumer, NULL);
+
+    /* gave a way of sending this to a thread;
+    */ 
 
     Pthread_join(p1, NULL);
     Pthread_join(p2, NULL);
